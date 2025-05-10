@@ -13,24 +13,31 @@
 typedef struct {
     char dos_command[MAX_COMMAND_LENGTH];
     char linux_command[MAX_COMMAND_LENGTH];
+    int min_args;  // Minimum number of arguments required
+    int max_args;  // Maximum number of arguments allowed
 } CommandMapping;
 
-// Function prototypes
 void displayMenu();
 void displayManual();
 void executeCommand(char *command, FILE *file);
 void loadMappings(CommandMapping *mappings, int *mappingCount, FILE *file);
-char *getDOSToLinuxCommand(char *dosCommand, CommandMapping *mappings, int mappingCount);
+char *getDOSToLinuxCommand(char *dosCommand, CommandMapping *mappings, int mappingCount, int *status);
 void trimString(char *str);
+int countArgs(char *command);
+void getCommandArgumentRequirements(const char *dos_command, int *min_args, int *max_args);
+
+// Status codes for command validation
+#define CMD_OK 0
+#define CMD_NOT_FOUND 1
+#define CMD_TOO_FEW_ARGS 2
+#define CMD_TOO_MANY_ARGS 3
 
 int main() {
     int choice = 0;
     char command[MAX_COMMAND_LENGTH];
     
-    // Display welcome message
     printf("\n===== DOS Command Shell Simulator =====\n\n");
-    
-    // Main program loop
+
     while (1) {
         displayMenu();
         printf("\nEnter choice: ");
@@ -70,7 +77,7 @@ int main() {
         
         printf("\nPress Enter to continue...");
         getchar();
-        system("clear || cls"); // Clear screen (works on both Linux and Windows)
+        system("clear || cls");
     }
     
     return 0;
@@ -97,6 +104,8 @@ void displayManual() {
     printf("  - cd       : Changes directory\n");
     printf("  - cls      : Clears the screen (maps to 'clear')\n");
     printf("\nNote: If a command is not found in the mapping file, an error message will be displayed.\n");
+    printf("      Some commands require specific numbers of arguments. Error messages will be shown\n");
+    printf("      if too few or too many arguments are provided.\n");
 }
 
 void executeCommand(char *command, FILE *file) {
@@ -105,28 +114,32 @@ void executeCommand(char *command, FILE *file) {
     char *linuxCommand;
     char outputBuffer[MAX_OUTPUT_LENGTH];
     FILE *fp;
+    int status = CMD_OK;
     
-    // Load mappings from file
     loadMappings(mappings, &mappingCount, file);
     
-    // Get the Linux equivalent of the DOS command
-    linuxCommand = getDOSToLinuxCommand(command, mappings, mappingCount);
+    linuxCommand = getDOSToLinuxCommand(command, mappings, mappingCount, &status);
     
-    if (linuxCommand == NULL) {
-        printf("Error: Command '%s' not found in the mapping file.\n", command);
-        return;
+    switch (status) {
+        case CMD_NOT_FOUND:
+            printf("Error: Command not found in the mapping file.\n");
+            return;
+        case CMD_TOO_FEW_ARGS:
+            printf("Error: Too few arguments for command '%s'.\n", command);
+            return;
+        case CMD_TOO_MANY_ARGS:
+            printf("Error: Too many arguments for command '%s'.\n", command);
+            return;
     }
     
     printf("Executing: %s (DOS) -> %s (Linux)\n", command, linuxCommand);
-    
-    // Execute the command and capture output
+
     fp = popen(linuxCommand, "r");
     if (fp == NULL) {
         printf("Error executing command.\n");
         return;
     }
-    
-    // Read and display output
+
     printf("\n----- Command Output -----\n");
     while (fgets(outputBuffer, MAX_OUTPUT_LENGTH, fp) != NULL) {
         printf("%s", outputBuffer);
@@ -141,10 +154,9 @@ void loadMappings(CommandMapping *mappings, int *mappingCount, FILE *file) {
     char *delimiter;
     
     *mappingCount = 0;
+    rewind(file);  // Reset file pointer to the beginning
     
     while (fgets(line, MAX_MAPPING_LENGTH, file) != NULL && *mappingCount < 100) {
-        
-        // Find the delimiter
         delimiter = strstr(line, "=");
         if (delimiter == NULL) {
             continue;
@@ -154,53 +166,64 @@ void loadMappings(CommandMapping *mappings, int *mappingCount, FILE *file) {
         *delimiter = '\0';
         strcpy(mappings[*mappingCount].dos_command, line);
         strcpy(mappings[*mappingCount].linux_command, delimiter + 1);
-        
-        // Trim whitespace
+
         trimString(mappings[*mappingCount].dos_command);
         trimString(mappings[*mappingCount].linux_command);
         
+        // Set default argument requirements
+        getCommandArgumentRequirements(mappings[*mappingCount].dos_command, 
+                                      &mappings[*mappingCount].min_args, 
+                                      &mappings[*mappingCount].max_args);
+        
         (*mappingCount)++;
     }
-    
-    fclose(file);
 }
 
-char *getDOSToLinuxCommand(char *dosCommand, CommandMapping *mappings, int mappingCount) {
+char *getDOSToLinuxCommand(char *dosCommand, CommandMapping *mappings, int mappingCount, int *status) {
     int i;
     char dosCmd[MAX_COMMAND_LENGTH];
     char *args = NULL;
     static char fullLinuxCommand[MAX_COMMAND_LENGTH * 2];
+    int argCount = 0;
     
-    // Extract the command (without arguments)
+    // Extract the command without arguments
     strcpy(dosCmd, dosCommand);
     args = strchr(dosCmd, ' ');
     if (args != NULL) {
         *args = '\0';
-        args = strchr(dosCommand, ' ');  // Point back to original string
+        args = strchr(dosCommand, ' ');
+        argCount = countArgs(args);
     }
-    
-    // Find the command in the mappings
+
     for (i = 0; i < mappingCount; i++) {
         if (strcasecmp(dosCmd, mappings[i].dos_command) == 0) {
-            // Found the command
-            strcpy(fullLinuxCommand, mappings[i].linux_command);
+            // Check if the command has the correct number of arguments
+            if (argCount < mappings[i].min_args) {
+                *status = CMD_TOO_FEW_ARGS;
+                return NULL;
+            }
+            if (argCount > mappings[i].max_args && mappings[i].max_args != -1) {
+                *status = CMD_TOO_MANY_ARGS;
+                return NULL;
+            }
             
-            // Add the arguments if any
+            strcpy(fullLinuxCommand, mappings[i].linux_command);
+
             if (args != NULL) {
                 strcat(fullLinuxCommand, args);
             }
             
+            *status = CMD_OK;
             return fullLinuxCommand;
         }
     }
     
+    *status = CMD_NOT_FOUND;
     return NULL;
 }
 
 void trimString(char *str) {
     int i, j;
-    
-    // Trim leading whitespace
     i = 0;
     while (isspace((unsigned char)str[i])) {
         i++;
@@ -213,10 +236,85 @@ void trimString(char *str) {
         str[j] = '\0';
     }
     
-    // Trim trailing whitespace
     i = strlen(str) - 1;
     while (i >= 0 && isspace((unsigned char)str[i])) {
         str[i] = '\0';
         i--;
+    }
+}
+
+// Count the number of arguments in a command string
+int countArgs(char *command) {
+    int count = 0;
+    int inArg = 0;
+    
+    if (command == NULL) {
+        return 0;
+    }
+    
+    // Skip leading space
+    while (*command == ' ') {
+        command++;
+    }
+    
+    // Count arguments (space-separated tokens)
+    while (*command) {
+        if (*command == ' ') {
+            inArg = 0;
+        } else if (!inArg) {
+            inArg = 1;
+            count++;
+        }
+        command++;
+    }
+    
+    return count;
+}
+
+// Define argument requirements for each DOS command
+void getCommandArgumentRequirements(const char *dos_command, int *min_args, int *max_args) {
+    // Default: no arguments required
+    *min_args = 0;
+    *max_args = -1;  // -1 means unlimited arguments
+    
+    // Commands that require specific number of arguments
+    if (strcasecmp(dos_command, "copy") == 0 || 
+        strcasecmp(dos_command, "xcopy") == 0 || 
+        strcasecmp(dos_command, "move") == 0 ||
+        strcasecmp(dos_command, "rename") == 0) {
+        *min_args = 2;  // These commands need at least 2 arguments (source and destination)
+        *max_args = 2;  // And they accept exactly 2 arguments
+    }
+    else if (strcasecmp(dos_command, "type") == 0 ||
+             strcasecmp(dos_command, "del") == 0 ||
+             strcasecmp(dos_command, "erase") == 0 ||
+             strcasecmp(dos_command, "rmdir") == 0 ||
+             strcasecmp(dos_command, "rd") == 0 ||
+             strcasecmp(dos_command, "md") == 0 ||
+             strcasecmp(dos_command, "taskkill") == 0) {
+        *min_args = 1;  // These commands need at least 1 argument
+        *max_args = -1; // But can accept multiple arguments
+    }
+    else if (strcasecmp(dos_command, "find") == 0) {
+        *min_args = 2;  // find needs at least a pattern and a file
+    }
+    else if (strcasecmp(dos_command, "ping") == 0) {
+        *min_args = 1;  // ping needs at least a host
+        *max_args = -1; // Can have more arguments for options
+    }
+    else if (strcasecmp(dos_command, "echo") == 0) {
+        *min_args = 1;  // echo needs something to echo
+    }
+    else if (strcasecmp(dos_command, "dir") == 0 ||
+             strcasecmp(dos_command, "cls") == 0 ||
+             strcasecmp(dos_command, "ver") == 0 ||
+             strcasecmp(dos_command, "date") == 0 ||
+             strcasecmp(dos_command, "time") == 0 ||
+             strcasecmp(dos_command, "ipconfig") == 0 ||
+             strcasecmp(dos_command, "netstat") == 0 ||
+             strcasecmp(dos_command, "tasklist") == 0) {
+        // These commands don't require arguments but can accept optional ones
+        *min_args = 0;
+        *max_args = -1;
     }
 }
