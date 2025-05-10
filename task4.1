@@ -1,0 +1,99 @@
+.TH TASK4
+
+.SH DESCRIPTION
+This is a program that emulates DOS commands by mapping
+them to equivalent Linux commands and displaying their output.
+
+.SH DOS COMMANDS
+Below is a list of supported DOS commands and their Linux equivalents:
+
+.SS File Operations
+.TP
+.B dir
+List directory contents (Linux: ls -la)
+.TP
+.B type \fI<file>\fR
+Display file contents (Linux: cat)
+.TP
+.B copy \fI<src> <dest>\fR
+Copy files (Linux: cp)
+.TP
+.B xcopy \fI<src> <dest>\fR
+Copy directories recursively (Linux: cp -r)
+.TP
+.B move \fI<src> <dest>\fR
+Move files or directories (Linux: mv)
+.TP
+.B rename \fI<old> <new>\fR
+Rename files (Linux: mv)
+.TP
+.B del \fI<file>\fR
+Delete files (Linux: rm)
+.TP
+.B erase \fI<file>\fR
+Delete files (Linux: rm)
+.TP
+.B rmdir \fI<dir>\fR
+Remove empty directories (Linux: rmdir)
+.TP
+.B rd \fI<dir>\fR
+Remove empty directories (Linux: rmdir)
+.TP
+.B md \fI<dir>\fR
+Create directories (Linux: mkdir)
+
+.SS System Operations
+.TP
+.B cls
+Clear screen (Linux: clear)
+.TP
+.B ver
+Show system version (Linux: uname -a)
+.TP
+.B date
+Display current date (Linux: date)
+.TP
+.B time
+Display current time (Linux: date +%T)
+.TP
+.B echo \fI<text>\fR
+Display text (Linux: echo)
+.TP
+.B pause
+Wait for user input (Linux: read)
+
+.SS Network Commands
+.TP
+.B ping \fI<host>\fR
+Send ICMP echo requests (Linux: ping)
+.TP
+.B ipconfig
+Display network configuration (Linux: ifconfig)
+.TP
+.B netstat
+Display network connections (Linux: netstat)
+
+.SS Process Commands
+.TP
+.B tasklist
+List all processes (Linux: ps aux)
+.TP
+.B taskkill \fI<pid>\fR
+Terminate a process (Linux: kill)
+
+.SH FILES
+.TP
+.B dos_linux_mapping.txt
+Configuration file containing DOS to Linux command mappings.
+
+.SH EXAMPLES
+.TP
+To list files in the current directory:
+.B dir
+.TP
+To display the contents of a file:
+.B type filename.txt
+.TP
+To copy a file:
+.B copy source.txt destination.txt
+
